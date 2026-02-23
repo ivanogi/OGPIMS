@@ -1,0 +1,144 @@
+        :root {
+            --pad: 10px;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            margin: 0;
+        }
+
+        header {
+            position: sticky;
+            top: 0;
+            background: #fff;
+            border-bottom: 1px solid #ddd;
+            padding: var(--pad);
+            z-index: 5;
+        }
+
+        .row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        input[type="text"],
+        select {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            min-width: 220px;
+        }
+
+        input[type="file"] {
+            padding: 6px;
+        }
+
+        button {
+            padding: 8px 10px;
+            border: 1px solid #ccc;
+            background: #f7f7f7;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .muted {
+            color: #666;
+            font-size: 12px;
+        }
+
+        main {
+            padding: var(--pad);
+        }
+
+        .table-wrap {
+            overflow: auto;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 12px;
+        }
+
+        thead th {
+            position: sticky;
+            top: 0;
+            background: #fafafa;
+            border-bottom: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        tbody td {
+            border-bottom: 1px solid #eee;
+            padding: 6px 8px;
+            vertical-align: top;
+        }
+
+        tbody tr:hover {
+            background: #fcfcfc;
+        }
+
+        tbody tr.clickable {
+            cursor: pointer;
+        }
+
+        .pill {
+            display: inline-block;
+            padding: 2px 8px;
+            border: 1px solid #ddd;
+            border-radius: 999px;
+            background: #fff;
+        }
+
+        .sep {
+            height: 1px;
+            background: #eee;
+            margin: 10px 0;
+        }
+
+        /* Collapsible column picker */
+        #colPickerWrap {
+            transition: max-height 0.25s ease, opacity 0.2s ease;
+            overflow: hidden;
+        }
+
+        #colPickerWrap.collapsed {
+            max-height: 0;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #colPickerWrap.expanded {
+            max-height: 300px;
+            opacity: 1;
+        }
+
+        #colPicker {
+            max-height: 280px;
+            overflow: auto;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        #colPicker label {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            border: 1px solid #e5e5e5;
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: #fff;
+        }

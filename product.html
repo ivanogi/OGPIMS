@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>PIMS Product</title>
+    <script src="assets/prodcode.js"></script>
+    <script src="assets/papaparse.js"></script>
+    <style>
+        :root {
+            --pad: 12px;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            margin: 0;
+        }
+
+        header {
+            border-bottom: 1px solid #ddd;
+            padding: var(--pad);
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        a {
+            color: inherit;
+        }
+
+        .pill {
+            display: inline-block;
+            padding: 2px 8px;
+            border: 1px solid #ddd;
+            border-radius: 999px;
+            background: #fff;
+        }
+
+        .muted {
+            color: #666;
+            font-size: 12px;
+        }
+
+        main {
+            padding: var(--pad);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 8px 14px;
+            align-items: start;
+        }
+
+        .k {
+            color: #333;
+            font-size: 12px;
+            padding: 6px 8px;
+            background: #fafafa;
+            border: 1px solid #eee;
+            border-radius: 8px;
+        }
+
+        .v {
+            font-size: 12px;
+            padding: 6px 8px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            word-break: break-word;
+        }
+
+        .v.empty {
+            color: #999;
+            font-style: italic;
+        }
+
+        .toolbar {
+            margin-left: auto;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        input[type="text"] {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            min-width: 260px;
+        }
+
+        button {
+            padding: 8px 10px;
+            border: 1px solid #ccc;
+            background: #f7f7f7;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .section {
+            margin-top: 14px;
+        }
+
+        .section h2 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+        }
+
+        .small {
+            font-size: 12px;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <a href="index.html">← Back to list</a>
+        <span class="pill" id="status">Loading…</span>
+        <span class="muted" id="title"></span>
+
+        <div class="toolbar">
+            <span class="muted">CSV path:</span>
+            <input id="path" type="text" value="db/products.csv" />
+            <button id="btnReload">Reload</button>
+        </div>
+    </header>
+
+    <main>
+        <div class="section">
+            <h2>Product details</h2>
+            <div class="grid" id="grid"></div>
+        </div>
+    </main>
+
+</body>
+
+</html>

@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>PIMS CSV Viewer</title>
+    <script src="assets/code.js"></script>
+    <script src="assets/papaparse.js"></script>
+    <link href="assets/style.css" rel="stylesheet">
+</head>
+
+<body>
+    <header>
+        <div class="row">
+            <strong>PIMS CSV Viewer</strong>
+            <span class="pill" id="status">Booting…</span>
+
+            <div class="row" style="margin-left:auto">
+                <input id="file" type="file" accept=".csv,text/csv" />
+                <button id="btnLoadFile">Load file</button>
+
+                <input id="path" type="text" value="db/products.csv" style="min-width:260px" />
+                <button id="btnLoadPath">Load path</button>
+
+                <button id="btnClear" disabled>Clear</button>
+            </div>
+        </div>
+
+        <div class="sep"></div>
+
+        <div class="row">
+            <input id="q" type="text" placeholder="Search (any column)..." disabled />
+            <select id="limit" disabled>
+                <option value="50">Show 50</option>
+                <option value="100">Show 100</option>
+                <option value="250">Show 250</option>
+                <option value="500">Show 500</option>
+                <option value="0">Show all</option>
+            </select>
+
+            <button id="btnExport" disabled>Export filtered CSV</button>
+            <span class="muted" id="meta"></span>
+        </div>
+
+        <div class="sep"></div>
+
+        <div class="row" style="font-size:12px">
+            <span class="muted">Columns:</span>
+            <button id="btnToggleCols" disabled>Hide</button>
+            <button id="btnColsAll" disabled>All</button>
+            <button id="btnColsNone" disabled>None</button>
+            <button id="btnColsCore" disabled>Core</button>
+            <span class="muted">Click a row to open the product detail page.</span>
+        </div>
+
+        <div id="colPickerWrap" class="expanded">
+            <div id="colPicker"></div>
+        </div>
+    </header>
+
+    <main>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr id="thead"></tr>
+                </thead>
+                <tbody id="tbody"></tbody>
+            </table>
+        </div>
+    </main>
+
+    <script>
+        (() => {
+            // MUST match your CSV column name exactly:
+            const SKU_FIELD = "Complete_item_number";
+
+            // Default CSV
+            const DEFAULT_CSV_PATH = "db/products.csv";
+
+            // Default visible columns for the list (tune as you like)
+            const CORE = [
+                "Complete_item_number",
+                "Item_No",
+                "invoice_product_name",
+                "Trademark_Product_brand_name_OGI",
+                "Category_No_OGI",
+                "UPC",
+                "suggested_retail_price_in_usd",
+                "MAP_in_USD_OGI"
+            ];
+
+            let rows = [];
+            let filtered = [];
+            let fields = [];
+            let visible = new Set();
+            let sortKey = null;
+            let sortDir = 1;
+            let colsVisible = true;
+
+            const el = (id) => document.getElementById(id);
+            const file = el("file");
+            const path = el("path");
+            const btnLoadFile = el("btnLoadFile");
+            const btnLoadPath = el("btnLoadPath");
+            const btnClear = el("btnClear");
+            const btnExport = el("btnExport");
+            const q = el("q");
+            const limit = el("limit");
+            const status = el("status");
+            const meta = el("meta");
+            const colPicker = el("colPicker");
+            const colPickerWrap = el("colPickerWrap");
+            const btnToggleCols = el("btnToggleCols");
+            const btnColsAll = el("btnColsAll");
+            const btnColsNone = el("btnColsNone");
+            const btnColsCore = el("btnColsCore");
+            const thead = el("thead");
+            const tbody = el("tbody");
+
+            function setEnabled(on) {
+                [q, limit, btnClear, btnExport, btnToggleCols, btnColsAll, btnColsNone, btnColsCore]
+                    .forEach(x => x.disabled = !on);
+            }
+
+            function safeStr(v) { return (v === null || v === undefined) ? "" : String(v); }
+            function escapeHtml(str) {
+                return str.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+            }
+
+            function updateMeta() {
+                const total = rows.length;
+                const shown = filtered.length;
+                meta.textContent = total ? `Rows: ${shown}/${total} • Columns: ${visible.size}/${fields.length}` : "";
+                status.textContent = total ? "Loaded" : "No file loaded";
+            }
+
+            function setColsExpanded(expanded) {
+                colsVisible = expanded;
+                colPickerWrap.classList.toggle("collapsed", !colsVisible);
+                colPickerWrap.classList.toggle("expanded", colsVisible);
+                btnToggleCols.textContent = colsVisible ? "Hide" : "Show";
+            }
+
+            function buildColumnPicker() {
+                colPicker.innerHTML = "";
+                for (const f of fields) {
+                    const id = "col_" + f.replace(/[^a-z0-9]/gi, "_");
+                    const label = document.createElement("label");
+                    label.innerHTML = `<input type="checkbox" id="${id}" ${visible.has(f) ? "checked" : ""}> <span>${escapeHtml(f)}</span>`;
+                    label.querySelector("input").addEventListener("change", (e) => {
+                        if (e.target.checked) visible.add(f);
+                        else visible.delete(f);
+                        render();
+                        updateMeta();
+                    });
+                    colPicker.appendChild(label);
+                }
+            }
+
+            function sortFiltered(key, toggle = true) {
+                if (toggle) {
+                    if (sortKey === key) sortDir *= -1;
+                    else { sortKey = key; sortDir = 1; }
+                } else {
+                    sortKey = key;
+                }
+
+                filtered.sort((a, b) => {
+                    const av = safeStr(a[key]);
+                    const bv = safeStr(b[key]);
+
+                    const an = Number(av), bn = Number(bv);
+                    const aNum = av.trim() !== "" && !Number.isNaN(an);
+                    const bNum = bv.trim() !== "" && !Number.isNaN(bn);
+
+                    if (aNum && bNum) return (an - bn) * sortDir;
+                    return av.localeCompare(bv) * sortDir;
+                });
+            }
+
+            function applyFilters() {
+                const term = q.value.trim().toLowerCase();
+                filtered = rows.filter(r => {
+                    if (!term) return true;
+                    for (const f of fields) {
+                        if (safeStr(r[f]).toLowerCase().includes(term)) return true;
+                    }
+                    return false;
+                });
+                if (sortKey) sortFiltered(sortKey, false);
+                render();
+                updateMeta();
+            }
+
+            function render() {
+                const cols = fields.filter(f => visible.has(f));
+
+                // Header
+                thead.innerHTML = "";
+                for (const f of cols) {
+                    const th = document.createElement("th");
+                    const arrow = (sortKey === f) ? (sortDir === 1 ? " ▲" : " ▼") : "";
+                    th.textContent = f + arrow;
+                    th.style.cursor = "pointer";
+                    th.addEventListener("click", () => { sortFiltered(f, true); render(); });
+                    thead.appendChild(th);
+                }
+
+                // Body
+                tbody.innerHTML = "";
+                const lim = Number(limit.value);
+                const view = (lim === 0) ? filtered : filtered.slice(0, lim);
+
+                const hasSku = fields.includes(SKU_FIELD);
+
+                for (const r of view) {
+                    const tr = document.createElement("tr");
+                    tr.classList.add("clickable");
+
+                    // row click -> product.html?sku=<Complete_item_number>
+                    tr.addEventListener("click", () => {
+                        if (!hasSku) {
+                            alert(`CSV is missing required column: ${SKU_FIELD}`);
+                            return;
+                        }
+                        const sku = safeStr(r[SKU_FIELD]).trim();
+                        if (!sku) {
+                            alert(`Row has empty ${SKU_FIELD}.`);
+                            return;
+                        }
+                        location.href = `product.html?sku=${encodeURIComponent(sku)}`;
+                    });
+
+                    for (const f of cols) {
+                        const td = document.createElement("td");
+                        td.textContent = safeStr(r[f]);
+                        tr.appendChild(td);
+                    }
+                    tbody.appendChild(tr);
+                }
+            }
+
+            function exportFilteredCSV() {
+                const cols = fields.filter(f => visible.has(f));
+                const data = filtered.map(r => {
+                    const o = {};
+                    for (const c of cols) o[c] = r[c];
+                    return o;
+                });
+                const csv = Papa.unparse(data, { quotes: true });
+                const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "pims_filtered.csv";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+            }
+
+            function clearAll() {
+                rows = []; filtered = []; fields = []; visible = new Set();
+                sortKey = null; sortDir = 1;
+                thead.innerHTML = ""; tbody.innerHTML = ""; colPicker.innerHTML = "";
+                q.value = "";
+                status.textContent = "No file loaded";
+                meta.textContent = "";
+                setEnabled(false);
+                file.value = "";
+            }
+
+            function loadFromText(text, sourceLabel) {
+                status.textContent = `Parsing… (${sourceLabel})`;
+                setEnabled(false);
+
+                const res = Papa.parse(text, { header: true, skipEmptyLines: true, dynamicTyping: false });
+
+                rows = res.data || [];
+                fields = res.meta?.fields || Object.keys(rows[0] || {});
+                filtered = [...rows];
+
+                const corePresent = CORE.filter(c => fields.includes(c));
+                visible = new Set(corePresent.length ? corePresent : fields.slice(0, Math.min(12, fields.length)));
+
+                buildColumnPicker();
+
+                setEnabled(true);
+                btnToggleCols.disabled = false;
+
+                // default: collapsed for readability
+                setColsExpanded(false);
+
+                render();
+                updateMeta();
+
+                if (!fields.includes(SKU_FIELD)) {
+                    alert(`Warning: CSV does not include required column "${SKU_FIELD}". Row click-to-detail will not work.`);
+                }
+                if (res.errors?.length) console.warn("CSV parse warnings:", res.errors);
+            }
+
+            async function loadFromPath(csvPath) {
+                const p = (csvPath || "").trim();
+                if (!p) { alert("Enter a CSV path, e.g. db/products.csv"); return; }
+
+                status.textContent = `Loading… (${p})`;
+                setEnabled(false);
+
+                try {
+                    const url = p + (p.includes("?") ? "&" : "?") + "v=" + Date.now();
+                    const resp = await fetch(url, { cache: "no-store" });
+                    if (!resp.ok) throw new Error(`HTTP ${resp.status} - ${resp.statusText}`);
+                    const text = await resp.text();
+                    loadFromText(text, p);
+                } catch (err) {
+                    console.error(err);
+                    status.textContent = "Load failed";
+                    alert("Could not load CSV from path.\n\nDetails: " + err.message);
+                    setEnabled(rows.length > 0);
+                }
+            }
+
+            // Events
+            btnLoadFile.addEventListener("click", () => {
+                const f = file.files?.[0];
+                if (!f) { alert("Choose a CSV file first."); return; }
+                status.textContent = `Loading… (${f.name})`;
+                setEnabled(false);
+                const reader = new FileReader();
+                reader.onload = () => loadFromText(String(reader.result || ""), f.name);
+                reader.onerror = () => { status.textContent = "Load failed"; alert("Failed to read file."); setEnabled(rows.length > 0); };
+                reader.readAsText(f);
+            });
+
+            btnLoadPath.addEventListener("click", () => loadFromPath(path.value));
+            btnClear.addEventListener("click", clearAll);
+            btnExport.addEventListener("click", exportFilteredCSV);
+            q.addEventListener("input", applyFilters);
+            limit.addEventListener("change", render);
+
+            btnToggleCols.addEventListener("click", () => setColsExpanded(!colsVisible));
+            btnColsAll.addEventListener("click", () => { visible = new Set(fields); buildColumnPicker(); render(); updateMeta(); });
+            btnColsNone.addEventListener("click", () => { visible = new Set(); buildColumnPicker(); render(); updateMeta(); });
+            btnColsCore.addEventListener("click", () => {
+                const corePresent = CORE.filter(c => fields.includes(c));
+                visible = new Set(corePresent.length ? corePresent : fields.slice(0, 12));
+                buildColumnPicker(); render(); updateMeta();
+            });
+
+            // Boot
+            path.value = DEFAULT_CSV_PATH;
+            setEnabled(false);
+            status.textContent = "Auto-loading…";
+            loadFromPath(DEFAULT_CSV_PATH);
+        })();
+    </script>
+</body>
+
+</html>
